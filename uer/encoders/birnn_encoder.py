@@ -8,7 +8,7 @@ class BilstmEncoder(nn.Module):
         super(BilstmEncoder, self).__init__()
 
         assert args.hidden_size % 2 == 0 
-        self.hidden_size= args.hidden_size // 2
+        self.hidden_size = args.hidden_size // 2
         
         self.layers_num = args.layers_num
 

@@ -20,6 +20,10 @@ from uer.model_saver import save_model
 from brain import KnowledgeGraph
 from multiprocessing import Process, Pool
 import numpy as np
+import os
+# set visible gpus that can be seen by os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 
 class BertClassifier(nn.Module):
@@ -143,7 +147,7 @@ def add_knowledge_worker(params):
     return dataset
 
 
-def main():
+def getargs():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Path options.
@@ -156,7 +160,7 @@ def main():
     parser.add_argument("--train_path", type=str, required=True,
                         help="Path of the trainset.")
     parser.add_argument("--dev_path", type=str, required=True,
-                        help="Path of the devset.") 
+                        help="Path of the devset.")
     parser.add_argument("--test_path", type=str, required=True,
                         help="Path of the testset.")
     parser.add_argument("--config_path", default="./models/google_config.json", type=str,
@@ -165,13 +169,15 @@ def main():
     # Model options.
     parser.add_argument("--batch_size", type=int, default=32,
                         help="Batch size.")
-    parser.add_argument("--seq_length", type=int, default=256,
+    parser.add_argument("--seq_length", type=int, default=128,
                         help="Sequence length.")
     parser.add_argument("--encoder", choices=["bert", "lstm", "gru", \
-                                                   "cnn", "gatedcnn", "attn", \
-                                                   "rcnn", "crnn", "gpt", "bilstm"], \
-                                                   default="bert", help="Encoder type.")
+                                              "cnn", "gatedcnn", "attn", \
+                                              "rcnn", "crnn", "gpt", "bilstm"], \
+                        default="bert", help="Encoder type.")
     parser.add_argument("--bidirectional", action="store_true", help="Specific to recurrent model.")
+    ### 'first' should be chosen when we use the [cls] encoding to represent a whole sentence ###
+    ### 'last' should be chosen when we use rnn encoding to represent a whole sentence ###
     parser.add_argument("--pooling", choices=["mean", "max", "first", "last"], default="first",
                         help="Pooling type.")
 
@@ -186,12 +192,12 @@ def main():
 
     # Tokenizer options.
     parser.add_argument("--tokenizer", choices=["bert", "char", "word", "space"], default="bert",
-                        help="Specify the tokenizer." 
+                        help="Specify the tokenizer."
                              "Original Google BERT uses bert tokenizer on Chinese corpus."
                              "Char tokenizer segments sentences into characters."
                              "Word tokenizer supports online word segmentation based on jieba segmentor."
                              "Space tokenizer segments sentences into words according to space."
-                             )
+                        )
 
     # Optimizer options.
     parser.add_argument("--learning_rate", type=float, default=2e-5,
@@ -200,6 +206,7 @@ def main():
                         help="Warm up value.")
 
     # Training options.
+    # 这里的dropout白设，后面args = load_hyperparam(args)会从google_config.json再次加载dropout
     parser.add_argument("--dropout", type=float, default=0.5,
                         help="Dropout.")
     parser.add_argument("--epochs_num", type=int, default=5,
@@ -218,6 +225,11 @@ def main():
     parser.add_argument("--no_vm", action="store_true", help="Disable the visible_matrix")
 
     args = parser.parse_args()
+    return args
+
+
+def main():
+    args = getargs()
 
     # Load the hyperparameters from the config file.
     args = load_hyperparam(args)
@@ -384,9 +396,22 @@ def main():
                 print("Report precision, recall, and f1:")
             
             for i in range(confusion.size()[0]):
-                p = confusion[i,i].item()/confusion[i,:].sum().item()
-                r = confusion[i,i].item()/confusion[:,i].sum().item()
-                f1 = 2*p*r / (p+r)
+                # 完善代码，避免ZeroDivisionError: division by zero. wxx
+                p_denominator = confusion[i,:].sum().item()
+                if p_denominator != 0:
+                    p = confusion[i,i].item()/p_denominator
+                else:
+                    p = 0
+                r_denominator = confusion[:,i].sum().item()
+                if r_denominator != 0:
+                    r = confusion[i,i].item()/r_denominator
+                else:
+                    r = 0
+                if p + r != 0:
+                    f1 = 2*p*r / (p+r)
+                else:
+                    f1 = 0
+                # 注意，取label_1_f1 = f1只适用于2分类问题
                 if i == 1:
                     label_1_f1 = f1
                 print("Label {}: {:.3f}, {:.3f}, {:.3f}".format(i,p,r,f1))

@@ -34,9 +34,11 @@ def build_model(args):
         subencoder = globals()[args.subencoder.capitalize() + "Subencoder"](args, len(args.sub_vocab))
     else:
         subencoder = None
+    print('subencoder is ', subencoder)
 
     embedding = BertEmbedding(args, len(args.vocab))
     encoder = globals()[args.encoder.capitalize() + "Encoder"](args)
+    # Bert+Target=BertTarget
     target = globals()[args.target.capitalize() + "Target"](args, len(args.vocab))
     model = Model(args, embedding, encoder, target, subencoder)
 
